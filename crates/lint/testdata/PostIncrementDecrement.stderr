@@ -1,0 +1,24 @@
+note[post-increment-decrement]: use pre-increment/decrement instead of post-increment/decrement
+   ╭▸ ROOT/testdata/PostIncrementDecrement.sol:LL:CC
+   │
+LL │         for (uint256 i = 0; i < arr.length; i++) {
+   │                                             ━━━
+   │
+   ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#post-increment-decrement
+
+note[post-increment-decrement]: use pre-increment/decrement instead of post-increment/decrement
+   ╭▸ ROOT/testdata/PostIncrementDecrement.sol:LL:CC
+   │
+LL │         for (uint256 i = arr.length; i > 0; i--) {
+   │                                             ━━━
+   │
+   ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#post-increment-decrement
+
+note[post-increment-decrement]: use pre-increment/decrement instead of post-increment/decrement
+   ╭▸ ROOT/testdata/PostIncrementDecrement.sol:LL:CC
+   │
+LL │         i++;
+   │         ━━━
+   │
+   ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#post-increment-decrement
+
