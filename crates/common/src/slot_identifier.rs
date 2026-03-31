@@ -988,3 +988,132 @@ fn get_array_base_indices(dyn_type: &DynSolType) -> String {
 pub fn is_struct(s: &str) -> bool {
     s.starts_with("struct ")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_storage(label: &str, slot: &str, type_ref: &str) -> Storage {
+        Storage {
+            ast_id: 0,
+            contract: "Test".to_string(),
+            label: label.to_string(),
+            offset: 0,
+            slot: slot.to_string(),
+            storage_type: type_ref.to_string(),
+        }
+    }
+
+    fn make_type(label: &str, encoding: &str, num_bytes: &str) -> StorageType {
+        StorageType {
+            label: label.to_string(),
+            encoding: encoding.to_string(),
+            number_of_bytes: num_bytes.to_string(),
+            key: None,
+            value: None,
+            other: BTreeMap::new(),
+        }
+    }
+
+    #[test]
+    fn test_identify_uint256() {
+        let mut types = BTreeMap::new();
+        types.insert("t_uint256".to_string(), make_type("uint256", ENCODING_INPLACE, "32"));
+
+        let layout = Arc::new(StorageLayout {
+            storage: vec![make_storage("myVar", "0", "t_uint256")],
+            types,
+        });
+
+        let identifier = SlotIdentifier::new(layout);
+        let slot = B256::from(alloy_primitives::U256::ZERO);
+        let result = identifier.identify(&slot, None);
+
+        assert!(result.is_some());
+        let info = result.unwrap();
+        assert_eq!(info.label, "myVar");
+        assert_eq!(info.slot, "0");
+    }
+
+    #[test]
+    fn test_identify_unknown_slot_returns_none() {
+        let mut types = BTreeMap::new();
+        types.insert("t_uint256".to_string(), make_type("uint256", ENCODING_INPLACE, "32"));
+
+        let layout = Arc::new(StorageLayout {
+            storage: vec![make_storage("myVar", "0", "t_uint256")],
+            types,
+        });
+
+        let identifier = SlotIdentifier::new(layout);
+        // slot 99 doesn't exist in layout
+        let slot = B256::from(alloy_primitives::U256::from(99));
+        let result = identifier.identify(&slot, None);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_identify_fixed_array_element() {
+        let mut types = BTreeMap::new();
+        types.insert("t_array".to_string(), make_type("uint256[3]", ENCODING_INPLACE, "96"));
+
+        let layout = Arc::new(StorageLayout {
+            storage: vec![make_storage("myArray", "0", "t_array")],
+            types,
+        });
+
+        let identifier = SlotIdentifier::new(layout);
+        // slot 1 is the second element of the array
+        let slot = B256::from(alloy_primitives::U256::from(1));
+        let result = identifier.identify(&slot, None);
+
+        assert!(result.is_some());
+        let info = result.unwrap();
+        assert!(info.label.contains("myArray"));
+        assert!(info.label.contains("[1]"));
+    }
+
+    #[test]
+    fn test_is_struct() {
+        assert!(is_struct("struct MyStruct"));
+        assert!(!is_struct("uint256"));
+        assert!(!is_struct("address"));
+        assert!(!is_struct("mapping(address => uint256)"));
+    }
+
+    #[test]
+    fn test_identify_address() {
+        let mut types = BTreeMap::new();
+        types.insert("t_address".to_string(), make_type("address", ENCODING_INPLACE, "20"));
+
+        let layout = Arc::new(StorageLayout {
+            storage: vec![make_storage("owner", "0", "t_address")],
+            types,
+        });
+
+        let identifier = SlotIdentifier::new(layout);
+        let slot = B256::from(alloy_primitives::U256::ZERO);
+        let result = identifier.identify(&slot, None);
+
+        assert!(result.is_some());
+        let info = result.unwrap();
+        assert_eq!(info.label, "owner");
+    }
+
+    #[test]
+    fn test_identify_bool() {
+        let mut types = BTreeMap::new();
+        types.insert("t_bool".to_string(), make_type("bool", ENCODING_INPLACE, "1"));
+
+        let layout =
+            Arc::new(StorageLayout { storage: vec![make_storage("flag", "2", "t_bool")], types });
+
+        let identifier = SlotIdentifier::new(layout);
+        let slot = B256::from(alloy_primitives::U256::from(2));
+        let result = identifier.identify(&slot, None);
+
+        assert!(result.is_some());
+        let info = result.unwrap();
+        assert_eq!(info.label, "flag");
+    }
+}
