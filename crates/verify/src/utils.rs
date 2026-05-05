@@ -479,4 +479,39 @@ mod tests {
         let msg = format!("{wrapped:#}");
         assert!(msg.contains("Invalid URL"), "message: {msg}");
     }
+
+    /// Regression test for #13479: print_result must not panic when no etherscan
+    /// metadata is available (i.e. the contract is not verified on any block explorer).
+    #[test]
+    fn print_result_succeeds_without_etherscan_metadata_on_match() {
+        let mut json_results = vec![];
+        let config = Config::default();
+        // Should not panic when metadata is None and verification matches.
+        print_result(
+            Some(VerificationType::Full),
+            BytecodeType::Creation,
+            &mut json_results,
+            None,
+            &config,
+        );
+    }
+
+    /// Regression test for #13479: when bytecodes don't match and no etherscan
+    /// metadata is present, print_result must not panic or try to compare
+    /// settings that don't exist.
+    #[test]
+    fn print_result_succeeds_without_etherscan_metadata_on_mismatch() {
+        let mut json_results = vec![];
+        let config = Config::default();
+        // Previously this would panic because it unconditionally called
+        // find_mismatch_in_settings with etherscan metadata. Now it
+        // skips that step when metadata is None.
+        print_result(
+            None,
+            BytecodeType::Runtime,
+            &mut json_results,
+            None,
+            &config,
+        );
+    }
 }
