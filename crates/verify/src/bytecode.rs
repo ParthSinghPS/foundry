@@ -171,17 +171,30 @@ impl VerifyBytecodeArgs {
 
         trace!(maybe_predeploy = ?maybe_predeploy);
 
-        // Get the constructor args using `source_code` endpoint.
-        let source_code = etherscan.contract_source_code(self.address).await?;
+        // Try to get the source code from the block explorer.
+        // This may fail if the contract is not verified on any block scanner.
+        let source_code = match etherscan.contract_source_code(self.address).await {
+            Ok(source_code) => Some(source_code),
+            Err(e) => {
+                if !shell::is_json() {
+                    sh_warn!(
+                        "Failed to fetch source code from block explorer: {e}. Proceeding without explorer verification."
+                    )?;
+                }
+                None
+            }
+        };
 
-        // Check if the contract name matches.
-        let name = source_code.items.first().map(|item| item.contract_name.clone());
-        if name.as_ref() != Some(&self.contract.name) {
-            eyre::bail!("Contract name mismatch");
+        // Check if the contract name matches (only if source code is available).
+        if let Some(ref source_code) = source_code {
+            let name = source_code.items.first().map(|item| item.contract_name.to_owned());
+            if name.as_ref() != Some(&self.contract.name) {
+                eyre::bail!("Contract name mismatch");
+            }
         }
 
-        // Obtain Etherscan compilation metadata.
-        let etherscan_metadata = source_code.items.first().unwrap();
+        // Obtain Etherscan compilation metadata (if available).
+        let etherscan_metadata = source_code.as_ref().and_then(|sc| sc.items.first());
 
         // Obtain local artifact
         let artifact = crate::utils::build_project(&self, &config)?;
@@ -206,9 +219,12 @@ impl VerifyBytecodeArgs {
 
         let mut constructor_args = if let Some(provided) = provided_constructor_args {
             provided.into()
-        } else {
+        } else if let Some(ref source_code) = source_code {
             // If no constructor args were provided, try to retrieve them from the explorer.
             check_explorer_args(source_code.clone())?
+        } else {
+            // No constructor args provided and no explorer data available.
+            Bytes::new()
         };
 
         // This fails only when the contract expects constructor args but NONE were provided OR
@@ -234,7 +250,7 @@ impl VerifyBytecodeArgs {
             let (mut evm_env, _, mut executor) = crate::utils::get_tracing_executor(
                 &mut fork_config,
                 gen_blk_num,
-                etherscan_metadata.evm_version()?.unwrap_or(EvmVersion::default()),
+                etherscan_metadata.and_then(|m| m.evm_version().ok().flatten()).unwrap_or(config.evm_version),
                 evm_opts,
             )
             .await?;
@@ -450,7 +466,7 @@ impl VerifyBytecodeArgs {
             let (mut evm_env, mut tx_env, mut executor) = crate::utils::get_tracing_executor(
                 &mut fork_config,
                 simulation_block - 1, // env.fork_block_number
-                etherscan_metadata.evm_version()?.unwrap_or(EvmVersion::default()),
+                etherscan_metadata.and_then(|m| m.evm_version().ok().flatten()).unwrap_or(config.evm_version),
                 evm_opts,
             )
             .await?;
